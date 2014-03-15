@@ -114,6 +114,7 @@ struct NSVGshape
 	struct NSVGpaint stroke;	// Stroke paint
 	float strokeWidth;			// Stroke width (scaled)
 	float bounds[4];			// Tight bounding box of the shape [minx,miny,maxx,maxy].
+	char id[64];			// id
 	struct NSVGpath* paths;		// Linked list of paths in the image.
 	struct NSVGshape* next;		// Pointer to next shape, or NULL if last element.
 };
@@ -339,6 +340,7 @@ struct NSVGattrib
 	float strokeOpacity;
 	char fillGradient[64];
 	char strokeGradient[64];
+	char id[64];
 	float strokeWidth;
 	float fontSize;
 	unsigned int stopColor;
@@ -783,6 +785,12 @@ static void nsvg__addShape(struct NSVGparser* p)
 		shape->stroke.gradient = nsvg__createGradient(p, attr->strokeGradient, shape->bounds, &shape->stroke.type);
 		if (shape->stroke.gradient == NULL)
 			shape->stroke.type = NSVG_PAINT_NONE;
+	}
+
+	// Set ID
+	if (strlen(attr->id) > 0) {
+		strncpy(shape->id, attr->id, 63);
+		shape->id[63] = '\0';		
 	}
 
 	// Add to tail
@@ -1409,6 +1417,10 @@ static int nsvg__parseAttr(struct NSVGparser* p, const char* name, const char* v
 		attr->stopOpacity = nsvg__parseFloat(NULL, value, 2);
 	} else if (strcmp(name, "offset") == 0) {
 		attr->stopOffset = nsvg__parseFloat(NULL, value, 2);
+	} else if (strcmp(name, "id") == 0) {
+		// only the first 63 will be copied...should be ok...
+		strncpy(attr->id, value, 63);
+		attr->id[63] = '\0';
 	} else {
 		return 0;
 	}
