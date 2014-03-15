@@ -115,6 +115,7 @@ struct NSVGshape
 	float strokeWidth;			// Stroke width (scaled)
 	float bounds[4];			// Tight bounding box of the shape [minx,miny,maxx,maxy].
 	char id[64];			// id
+	char unicode[64];			// unicode
 	struct NSVGpath* paths;		// Linked list of paths in the image.
 	struct NSVGshape* next;		// Pointer to next shape, or NULL if last element.
 };
@@ -341,6 +342,7 @@ struct NSVGattrib
 	char fillGradient[64];
 	char strokeGradient[64];
 	char id[64];
+	char unicode[64];
 	float strokeWidth;
 	float fontSize;
 	unsigned int stopColor;
@@ -791,6 +793,12 @@ static void nsvg__addShape(struct NSVGparser* p)
 	if (strlen(attr->id) > 0) {
 		strncpy(shape->id, attr->id, 63);
 		shape->id[63] = '\0';		
+	}
+
+	// Set unicode
+	if (strlen(attr->id) > 0) {
+		strncpy(shape->unicode, attr->unicode, 63);
+		shape->unicode[63] = '\0';		
 	}
 
 	// Add to tail
@@ -1420,6 +1428,10 @@ static int nsvg__parseAttr(struct NSVGparser* p, const char* name, const char* v
 	} else if (strcmp(name, "id") == 0) {
 		// only the first 63 will be copied...should be ok...
 		strncpy(attr->id, value, 63);
+		attr->id[63] = '\0';
+	} else if (strcmp(name, "unicode") == 0) {
+		// only the first 63 will be copied...should be ok...
+		strncpy(attr->unicode, value, 63);
 		attr->id[63] = '\0';
 	} else {
 		return 0;
@@ -2282,10 +2294,13 @@ static void nsvg__startElement(void* ud, const char* el, const char** attr)
 		return;
 	}
 	
-	if (strcmp(el, "g") == 0) {
+	if ((strcmp(el, "g") == 0)
+	    || (strcmp(el, "defs") == 0)
+	    || (strcmp(el, "font") == 0)) {
 		nsvg__pushAttr(p);
 		nsvg__parseAttribs(p, attr);
-	} else if (strcmp(el, "path") == 0) {
+	} else if ((strcmp(el, "path") == 0)
+	           || (strcmp(el, "glyph") == 0)) {
 		if (p->pathFlag)	// Do not allow nested paths.
 			return;
 		nsvg__pushAttr(p);
