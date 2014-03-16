@@ -115,6 +115,7 @@ struct NSVGshape
 	float strokeWidth;			// Stroke width (scaled)
 	float bounds[4];			// Tight bounding box of the shape [minx,miny,maxx,maxy].
 	char unicode[64];			// unicode
+	float horizAdvX;			// horiz_adv_x
 	struct NSVGpath* paths;		// Linked list of paths in the image.
 	struct NSVGshape* next;		// Pointer to next shape, or NULL if last element.
 };
@@ -341,6 +342,7 @@ struct NSVGattrib
 	char fillGradient[64];
 	char strokeGradient[64];
 	char unicode[64];
+	float horizAdvX;
 	float strokeWidth;
 	float fontSize;
 	unsigned int stopColor;
@@ -787,10 +789,13 @@ static void nsvg__addShape(struct NSVGparser* p)
 			shape->stroke.type = NSVG_PAINT_NONE;
 	}
 
+	// Set horizAdvX
+	shape->horizAdvX = attr->horizAdvX;
+
 	// Set unicode
 	if (strlen(attr->unicode) > 0) {
 		strncpy(shape->unicode, attr->unicode, 63);
-		shape->unicode[63] = '\0';		
+		shape->unicode[63] = '\0';
 	}
 
 	// Add to tail
@@ -1417,6 +1422,8 @@ static int nsvg__parseAttr(struct NSVGparser* p, const char* name, const char* v
 		attr->stopOpacity = nsvg__parseFloat(NULL, value, 2);
 	} else if (strcmp(name, "offset") == 0) {
 		attr->stopOffset = nsvg__parseFloat(NULL, value, 2);
+	} else if (strcmp(name, "horiz-adv-x") == 0) {
+		attr->horizAdvX = nsvg__parseFloat(NULL, value, 2);
 	} else if (strcmp(name, "unicode") == 0) {
 		// only the first 63 will be copied...should be ok...
 		strncpy(attr->unicode, value, 63);
