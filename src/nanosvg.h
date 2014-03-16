@@ -126,6 +126,7 @@ struct NSVGfont
 {
 	char fontFamily[64];			// unicode
 	float horizAdvX;			// horiz_adv_x
+	float unitsPerEm;			// horiz_adv_x
 	struct NSVGfont* next;		// Pointer to next font, or NULL if last element.
 	struct NSVGshape* shapes;	// Linked list of glyphs (shapes)
 };
@@ -354,6 +355,7 @@ struct NSVGattrib
 	char strokeGradient[64];
 	char unicode[64];
 	float horizAdvX;
+	float unitsPerEm;
 	float strokeWidth;
 	float fontSize;
 	unsigned int stopColor;
@@ -857,7 +859,7 @@ static void nsvg__addFont(struct NSVGparser* p)
 
 	scale = nsvg__maxf(fabsf(attr->xform[0]), fabsf(attr->xform[3]));
 
-	// Set horizAdvX
+	// Set horizAdvX and unitsPerEm
 	font->horizAdvX = attr->horizAdvX;
 
 	// Add to tail
@@ -878,7 +880,7 @@ error:
 	if (font) free(font);
 }
 
-static void nsvg__addFontFamily(struct NSVGparser* p, const char * ff)
+static struct NSVGfont* nsvg__getLastFont(struct NSVGparser* p)
 {
 	struct NSVGfont *font;
 
@@ -886,8 +888,22 @@ static void nsvg__addFontFamily(struct NSVGparser* p, const char * ff)
 	while (font->next != NULL) {
 		font = font->next;
 	}
+	return font;
+}
+
+static void nsvg__addFontFamily(struct NSVGparser* p, const char * ff)
+{
+	struct NSVGfont *font;
+	font = nsvg__getLastFont(p);
 	strncpy(font->fontFamily, ff, 63);
 	font->fontFamily[63] = '\0';
+}
+
+static void nsvg__addUnitsPerEm(struct NSVGparser* p, float upem)
+{
+	struct NSVGfont *font;
+	font = nsvg__getLastFont(p);
+	font->unitsPerEm = upem;
 }
 
 static void nsvg__addPath(struct NSVGparser* p, char closed)
@@ -2213,6 +2229,8 @@ static void nsvg__parseFontFace(struct NSVGparser* p, const char** attr)
 		if (!nsvg__parseAttr(p, attr[i], attr[i + 1])) {
 			if (strcmp(attr[i], "font-family") == 0) {
 				nsvg__addFontFamily(p, attr[i + 1]);
+			} else if (strcmp(attr[i], "units-per-em") == 0) {
+				nsvg__addUnitsPerEm(p, nsvg__parseFloat(NULL, attr[i + 1], 2));
 			}
 		}
 	}
