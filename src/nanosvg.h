@@ -108,6 +108,8 @@ struct NSVGpath
 	struct NSVGpath* next;		// Pointer to next path, or NULL if last element.
 };
 
+
+// TODO - create a shape and 
 struct NSVGshape
 {
 	struct NSVGpaint fill;		// Fill paint
@@ -120,11 +122,19 @@ struct NSVGshape
 	struct NSVGshape* next;		// Pointer to next shape, or NULL if last element.
 };
 
+struct NSVGfont
+{
+	float horizAdvX;			// horiz_adv_x
+	struct NSVGfont* next;		// Pointer to next font, or NULL if last element.
+	struct NSVGshape* shapes;	// Linked list of glyphs (shapes)
+};
+
 struct NSVGimage
 {
 	float width;				// Width of the image.
 	float height;				// Height of the image.
 	struct NSVGshape* shapes;	// Linked list of shapes in the image.
+	struct NSVGfont* fonts;	// Linked list of shapes in the image.
 };
 
 // Parses SVG file from a file, returns SVG image as paths.
@@ -730,12 +740,13 @@ static struct NSVGgradient* nsvg__createGradient(struct NSVGparser* p, const cha
 	return grad;
 }
 
-static void nsvg__addShape(struct NSVGparser* p)
+static void nsvg__addShape(struct NSVGparser* p, bool glyph)
 {
 	struct NSVGattrib* attr = nsvg__getAttr(p);
 	float scale = 1.0f;
 	struct NSVGshape *shape, *cur, *prev;
 	struct NSVGpath* path;
+	struct NSVGfont *font;
 
 	if (p->plist == NULL)
 		return;
@@ -789,31 +800,81 @@ static void nsvg__addShape(struct NSVGparser* p)
 			shape->stroke.type = NSVG_PAINT_NONE;
 	}
 
-	// Set horizAdvX
-	shape->horizAdvX = attr->horizAdvX;
+        if (glyph) {
+		// Set horizAdvX
+		shape->horizAdvX = attr->horizAdvX;
 
-	// Set unicode
-	if (strlen(attr->unicode) > 0) {
-		strncpy(shape->unicode, attr->unicode, 63);
-		shape->unicode[63] = '\0';
+		// Set unicode
+		if (strlen(attr->unicode) > 0) {
+			strncpy(shape->unicode, attr->unicode, 63);
+			shape->unicode[63] = '\0';
+		}
 	}
 
 	// Add to tail
 	prev = NULL;
-	cur = p->image->shapes;
+	cur = NULL;
+	font = p->image->fonts;
+	while (font->next != NULL) {
+		font = font->next;
+	}
+
+	if (glyph) {
+		cur = font->shapes;
+	} else {
+		cur = p->image->shapes;
+	}
+	
 	while (cur != NULL) {
 		prev = cur;
 		cur = cur->next;
 	}
-	if (prev == NULL)
-		p->image->shapes = shape;
-	else
+	if (prev == NULL) {
+		if (glyph)
+			font->shapes = shape;
+		else
+			p->image->shapes = shape;
+	} else {
 		prev->next = shape;
+	}
 
 	return;
 
 error:
 	if (shape) free(shape);
+}
+
+static void nsvg__addFont(struct NSVGparser* p)
+{
+	struct NSVGattrib* attr = nsvg__getAttr(p);
+	float scale = 1.0f;
+	struct NSVGfont *font, *cur, *prev;
+
+	font = (struct NSVGfont*)malloc(sizeof(struct NSVGfont));
+	if (font == NULL) goto error;
+	memset(font, 0, sizeof(struct NSVGfont));
+
+	scale = nsvg__maxf(fabsf(attr->xform[0]), fabsf(attr->xform[3]));
+
+	// Set horizAdvX
+	font->horizAdvX = attr->horizAdvX;
+
+	// Add to tail
+	prev = NULL;
+	cur = p->image->fonts;
+	while (cur != NULL) {
+		prev = cur;
+		cur = cur->next;
+	}
+	if (prev == NULL)
+		p->image->fonts = font;
+	else
+		prev->next = font;
+
+	return;
+
+error:
+	if (font) free(font);
 }
 
 static void nsvg__addPath(struct NSVGparser* p, char closed)
@@ -1831,7 +1892,7 @@ static void nsvg__pathArcTo(struct NSVGparser* p, float* cpx, float* cpy, float*
 	*cpy = y2;
 }
 
-static void nsvg__parsePath(struct NSVGparser* p, const char** attr)
+static void nsvg__parsePath(struct NSVGparser* p, const char** attr, bool glyph)
 {
 	const char* s = NULL;
 	char cmd;
@@ -1948,7 +2009,7 @@ static void nsvg__parsePath(struct NSVGparser* p, const char** attr)
 			nsvg__addPath(p, closedFlag);	
 	}
 
-	nsvg__addShape(p);
+	nsvg__addShape(p, glyph);
 }
 
 static void nsvg__parseRect(struct NSVGparser* p, const char** attr)
@@ -2002,7 +2063,7 @@ static void nsvg__parseRect(struct NSVGparser* p, const char** attr)
 		
 		nsvg__addPath(p, 1);
 
-		nsvg__addShape(p);
+		nsvg__addShape(p, false);
 	}
 }
 
@@ -2032,7 +2093,7 @@ static void nsvg__parseCircle(struct NSVGparser* p, const char** attr)
 		
 		nsvg__addPath(p, 1);
 
-		nsvg__addShape(p);
+		nsvg__addShape(p, false);
 	}
 }
 
@@ -2065,7 +2126,7 @@ static void nsvg__parseEllipse(struct NSVGparser* p, const char** attr)
 		
 		nsvg__addPath(p, 1);
 
-		nsvg__addShape(p);
+		nsvg__addShape(p, false);
 	}
 }
 
@@ -2093,7 +2154,7 @@ static void nsvg__parseLine(struct NSVGparser* p, const char** attr)
 	
 	nsvg__addPath(p, 0);
 
-	nsvg__addShape(p);
+	nsvg__addShape(p, false);
 }
 
 static void nsvg__parsePoly(struct NSVGparser* p, const char** attr, int closeFlag)
@@ -2129,7 +2190,7 @@ static void nsvg__parsePoly(struct NSVGparser* p, const char** attr, int closeFl
 	
 	nsvg__addPath(p, (char)closeFlag);
 
-	nsvg__addShape(p);
+	nsvg__addShape(p, false);
 }
 
 static void nsvg__parseSVG(struct NSVGparser* p, const char** attr)
@@ -2278,28 +2339,35 @@ static void nsvg__startElement(void* ud, const char* el, const char** attr)
 	struct NSVGparser* p = (struct NSVGparser*)ud;
 	
 	if (p->defsFlag) {
-		// Skip everything but gradients in defs
+		// Skip everything but gradients and fonts in defs
 		if (strcmp(el, "linearGradient") == 0) {
 			nsvg__parseGradient(p, attr, NSVG_PAINT_LINEAR_GRADIENT);
 		} else if (strcmp(el, "radialGradient") == 0) {
 			nsvg__parseGradient(p, attr, NSVG_PAINT_RADIAL_GRADIENT);
 		} else if (strcmp(el, "stop") == 0) {
 			nsvg__parseGradientStop(p, attr);
+		} else if (strcmp(el, "font") == 0) {
+			nsvg__pushAttr(p);
+			nsvg__parseAttribs(p, attr);
+			nsvg__addFont(p);
+		} else if (strcmp(el, "glyph") == 0) {
+			if (p->pathFlag)	// Do not allow nested paths.
+				return;
+			nsvg__pushAttr(p);
+			nsvg__parsePath(p, attr, true);
+			nsvg__popAttr(p);
 		}
 		return;
 	}
 	
-	if ((strcmp(el, "g") == 0)
-	    || (strcmp(el, "defs") == 0)
-	    || (strcmp(el, "font") == 0)) {
+	if (strcmp(el, "g") == 0) {
 		nsvg__pushAttr(p);
 		nsvg__parseAttribs(p, attr);
-	} else if ((strcmp(el, "path") == 0)
-	           || (strcmp(el, "glyph") == 0)) {
+	} else if (strcmp(el, "path") == 0) {
 		if (p->pathFlag)	// Do not allow nested paths.
 			return;
 		nsvg__pushAttr(p);
-		nsvg__parsePath(p, attr);
+		nsvg__parsePath(p, attr, false);
 		nsvg__popAttr(p);
 	} else if (strcmp(el, "rect") == 0) {
 		nsvg__pushAttr(p);
@@ -2344,7 +2412,11 @@ static void nsvg__endElement(void* ud, const char* el)
 	
 	if (strcmp(el, "g") == 0) {
 		nsvg__popAttr(p);
+	} else if (strcmp(el, "font") == 0) {
+		nsvg__popAttr(p);
 	} else if (strcmp(el, "path") == 0) {
+		p->pathFlag = 0;
+	} else if (strcmp(el, "glyph") == 0) {
 		p->pathFlag = 0;
 	} else if (strcmp(el, "defs") == 0) {
 		p->defsFlag = 0;
@@ -2399,6 +2471,11 @@ static void nsvg__scaleToViewbox(struct NSVGparser* p, const char* units)
 	float tx, ty, sx, sy, us, bounds[4], t[6];
 	int i;
 	float* pt;
+
+	// if NSVGshape is null, then we may have a font-only document
+	// just return at that point
+	if (p->image->shapes == NULL)
+		return;
 
 	// Guess image size if not set completely.
 	nsvg__imageBounds(p, bounds);
