@@ -124,6 +124,7 @@ struct NSVGshape
 
 struct NSVGfont
 {
+	char fontFamily[64];			// unicode
 	float horizAdvX;			// horiz_adv_x
 	struct NSVGfont* next;		// Pointer to next font, or NULL if last element.
 	struct NSVGshape* shapes;	// Linked list of glyphs (shapes)
@@ -875,6 +876,18 @@ static void nsvg__addFont(struct NSVGparser* p)
 
 error:
 	if (font) free(font);
+}
+
+static void nsvg__addFontFamily(struct NSVGparser* p, const char * ff)
+{
+	struct NSVGfont *font;
+
+	font = p->image->fonts;
+	while (font->next != NULL) {
+		font = font->next;
+	}
+	strncpy(font->fontFamily, ff, 63);
+	font->fontFamily[63] = '\0';
 }
 
 static void nsvg__addPath(struct NSVGparser* p, char closed)
@@ -2193,6 +2206,18 @@ static void nsvg__parsePoly(struct NSVGparser* p, const char** attr, int closeFl
 	nsvg__addShape(p, false);
 }
 
+static void nsvg__parseFontFace(struct NSVGparser* p, const char** attr)
+{
+	int i;
+	for (i = 0; attr[i]; i += 2) {
+		if (!nsvg__parseAttr(p, attr[i], attr[i + 1])) {
+			if (strcmp(attr[i], "font-family") == 0) {
+				nsvg__addFontFamily(p, attr[i + 1]);
+			}
+		}
+	}
+}
+
 static void nsvg__parseSVG(struct NSVGparser* p, const char** attr)
 {
 	int i;
@@ -2350,6 +2375,10 @@ static void nsvg__startElement(void* ud, const char* el, const char** attr)
 			nsvg__pushAttr(p);
 			nsvg__parseAttribs(p, attr);
 			nsvg__addFont(p);
+		} else if (strcmp(el, "font-face") == 0) {
+			nsvg__pushAttr(p);
+			nsvg__parseFontFace(p, attr);
+			nsvg__popAttr(p);
 		} else if (strcmp(el, "glyph") == 0) {
 			if (p->pathFlag)	// Do not allow nested paths.
 				return;
